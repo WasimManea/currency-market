@@ -158,7 +158,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         usd_market = get_sarf_today_rate("USD")
         aed_market = get_sarf_today_rate("AED")
         usd_official, aed_official = get_currencylayer_rates()
-        today = datetime.date.today().strftime("%Y-%m-%d %H:%M:%S")
+        today = datetime.datetime.now().isoformat()
 
 
         message = "💹 *Live Exchange Rates - EGYPT*\n\n"
