@@ -4,5 +4,5 @@ python-telegram-bot[webhooks]==21.0
 # For HTTP requests to APIs (Sarf-Today and CurrencyLayer)
 requests==2.31.0
 
-# Optional: useful for datetime parsing if needed
-python-dateutil==2.9.2
+# Date handling
+python-dateutil==2.9.0
