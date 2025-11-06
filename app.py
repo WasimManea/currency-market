@@ -35,12 +35,17 @@ def load_cache(file):
         return {}
 
 def save_cache(cache, file):
+    """Save cache and add last_updated timestamp."""
     try:
+        # Add/update timestamp
+        cache["_last_updated"] = datetime.datetime.now().isoformat()
         with open(file, "w") as f:
             json.dump(cache, f, indent=2)
-        print(f"💾 Cache updated → {file}")
+        print(f"💾 Cache updated → {file} (last_updated: {cache['_last_updated']})")
     except Exception as e:
         print(f"❌ Failed to save cache {file}: {e}")
+
+
 
 def get_usage_count(currency):
     today = datetime.date.today().isoformat()
@@ -154,8 +159,11 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         usd_market = get_sarf_today_rate("USD")
         aed_market = get_sarf_today_rate("AED")
         usd_official, aed_official = get_currencylayer_rates()
-
-        message = "💱 *Live Exchange Rates*\n\n"
+        api_cache = load_cache(API_CACHE_FILE)
+        last_update = api_cache.get("_last_updated", "N/A")
+        
+        message = "💹 *Live Exchange Rates - EGYPT*\n\n"
+        message += f"📅 Rate Date: {rate_date or str(date.today())}\n\n"
 
         message += "🇺🇸 *USD → EGP*\n"
         if usd_market:
@@ -171,6 +179,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message += f"  • Official: {aed_official:.4f} EGP\n"
         message += "\n"
 
+        message += f"🕒 Last official rates update: `{last_update}`\n"    
         message += "📝 Data sources: Sarf-Today & CurrencyLayer"
 
         await update.message.reply_text(escape_md(message), parse_mode="MarkdownV2")
