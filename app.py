@@ -1,22 +1,24 @@
 import os
 import json
 import requests
-from datetime import datetime, date
+from datetime import date
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Telegram bot token
+# Telegram bot token (set as GitHub secret or Railway environment variable)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # CurrencyLayer API
 CURRENCY_API_URL = "https://api.exchangerate.host/change"
-ACCESS_KEY = "4fcbc72dcd2d4b364af824ea0c319a32"
+ACCESS_KEY = os.getenv("CURRENCY_ACCESS_KEY")  # store this as env variable
 
 # Sarf-Today API
 SARF_TODAY_URL = "https://sarf-today.com/app_api/cur_market.json"
 
-# Cache file for CurrencyLayer rates
-CACHE_FILE = "currency_cache.json"
+# Cache file in GitHub repo
+CACHE_DIR = "cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
+CACHE_FILE = os.path.join(CACHE_DIR, "currency_cache.json")
 MAX_CALLS_PER_DAY = 3
 
 # Fetch Sarf-Today rates
@@ -48,17 +50,17 @@ def save_cache(cache):
     with open(CACHE_FILE, "w") as f:
         json.dump(cache, f)
 
-# Fetch CurrencyLayer rates with max 3 calls/day
+# Fetch CurrencyLayer rates with caching (max 3 calls/day)
 def get_currencylayer_rates():
     cache = load_cache()
     today_str = str(date.today())
 
-    # Reset daily calls if it's a new day
-    if cache["date"] != today_str:
+    # Reset daily calls if new day
+    if cache.get("date") != today_str:
         cache["date"] = today_str
         cache["calls"] = 0
 
-    # If we haven't exceeded max calls, call API
+    # Call API if under max calls
     if cache["calls"] < MAX_CALLS_PER_DAY:
         try:
             params = {"currencies": "AED,EGP", "access_key": ACCESS_KEY}
@@ -72,25 +74,32 @@ def get_currencylayer_rates():
                 usd_to_egp = round(usdegp, 4)
 
                 # Update cache
-                cache["usd_egp"] = usd_to_egp
-                cache["aed_egp"] = aed_to_egp
-                cache["calls"] += 1
-                cache["rate_date"] = data.get("end_date", today_str)
+                cache.update({
+                    "usd_egp": usd_to_egp,
+                    "aed_egp": aed_to_egp,
+                    "calls": cache.get("calls", 0) + 1,
+                    "rate_date": data.get("end_date", today_str)
+                })
                 save_cache(cache)
 
                 return usd_to_egp, aed_to_egp, cache["rate_date"]
-
         except Exception as e:
             print("CurrencyLayer API error:", e)
-            # On error, fallback to cached rates if available
-            if cache["usd_egp"] and cache["aed_egp"]:
+            # fallback to cached rates
+            if cache.get("usd_egp") and cache.get("aed_egp"):
                 return cache["usd_egp"], cache["aed_egp"], cache.get("rate_date", today_str)
             return None, None, None
     else:
-        # Use cached rates after max calls reached
-        if cache["usd_egp"] and cache["aed_egp"]:
+        # Use cached rates
+        if cache.get("usd_egp") and cache.get("aed_egp"):
             return cache["usd_egp"], cache["aed_egp"], cache.get("rate_date", today_str)
     return None, None, None
+
+# Helper for trend arrow
+def trend_arrow(change_pct):
+    if change_pct is None:
+        return ""
+    return "▲" if float(change_pct) > 0 else "▼"
 
 # /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -107,26 +116,36 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     aed_market = get_sarf_today_rate("AED")
     usd_official, aed_official, rate_date = get_currencylayer_rates()
 
-    message = "💱 *Live Exchange Rates*\n\n"
+    message = "💹 *Live Exchange Rates*\n\n"
+    message += f"📅 Rate Date: {rate_date or str(date.today())}\n\n"
+
+    # Helper for trend arrow
+    def trend_arrow(change_pct):
+        if change_pct is None:
+            return ""
+        return "▲" if float(change_pct) > 0 else "▼"
 
     # USD
     message += "🇺🇸 *USD → EGP*\n"
     if usd_market:
-        message += f"  • Market:  {usd_market['ask']:.2f} EGP (▲ {usd_market['change']}%)\n"
+        arrow = trend_arrow(usd_market['change'])
+        message += f"  • Market: {usd_market['ask']:.2f} EGP ({arrow} {usd_market['change']}%)\n"
     if usd_official:
-        message += f"  • Official: {usd_official} EGP (CurrencyLayer, {rate_date})\n"
+        message += f"  • Official: {usd_official:.4f} EGP (CurrencyLayer)\n"
     message += "\n"
 
     # AED
     message += "🇦🇪 *AED → EGP*\n"
     if aed_market:
-        message += f"  • Market:  {aed_market['ask']:.2f} EGP (▲ {aed_market['change']}%)\n"
+        arrow = trend_arrow(aed_market['change'])
+        message += f"  • Market: {aed_market['ask']:.2f} EGP ({arrow} {aed_market['change']}%)\n"
     if aed_official:
-        message += f"  • Official: {aed_official} EGP (CurrencyLayer, {rate_date})\n"
+        message += f"  • Official: {aed_official:.4f} EGP (CurrencyLayer)\n"
 
-    message += "\n_Data sources: Sarf-Today (Egypt Market) & CurrencyLayer_"
+    message += "\n📝 Data sources: Sarf-Today (Market) & CurrencyLayer (Official, cached max 3/day)"
 
     await update.message.reply_text(message, parse_mode="Markdown")
+
 
 # Main
 def main():
