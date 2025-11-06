@@ -44,6 +44,13 @@ def save_cache(cache, file):
         print(f"❌ Failed to save cache {file}: {e}")
 
 
+def get_usage_count(currency):
+    """Return today's usage count for a currency."""
+    today = datetime.date.today().isoformat()
+    cache = load_cache(CACHE_FILE)
+    return cache.get(today, {}).get(currency, 0)
+
+
 def increment_usage(currency):
     today = datetime.date.today().isoformat()
     cache = load_cache(CACHE_FILE)
@@ -62,18 +69,9 @@ def increment_usage(currency):
     return True
 
 
-# ----------------- API helpers with caching -----------------
+# ----------------- API helpers -----------------
 def get_sarf_today_rate(currency):
-    today = datetime.date.today().isoformat()
-    cache = load_cache(API_CACHE_FILE)
-
-    if today not in cache:
-        cache[today] = {}
-
-    if currency in cache[today]:
-        print(f"📦 Using cached market rate for {currency}: {cache[today][currency]}")
-        return cache[today][currency]
-
+    """Always fetch market rate live (no caching)."""
     print(f"🌐 Fetching market rate for {currency} from Sarf-Today API...")
     try:
         response = requests.get(SARF_TODAY_URL, timeout=10)
@@ -81,21 +79,18 @@ def get_sarf_today_rate(currency):
         for item in data:
             if item["name"] == currency:
                 rate = float(item["ask"])
-                cache[today][currency] = rate
-                save_cache(cache, API_CACHE_FILE)
-                print(f"✅ Got {currency} rate: {rate}")
+                print(f"✅ Got live {currency} market rate: {rate}")
                 return rate
+        print(f"⚠️ Currency {currency} not found in Sarf-Today response.")
     except Exception as e:
         print("❌ Sarf-Today API error:", e)
     return None
 
 
-def get_currencylayer_rates():
+def get_currencylayer_rates(force_live=False):
     """
     Fetch official rates using exchangerate.host/change.
-    We compute:
-      - USD → EGP
-      - AED → EGP = USD_EGP / USD_AED
+    If force_live=False and limit exceeded, only use cache.
     """
     today = datetime.date.today().isoformat()
     cache = load_cache(API_CACHE_FILE)
@@ -103,9 +98,13 @@ def get_currencylayer_rates():
     if today not in cache:
         cache[today] = {}
 
-    if "USD" in cache[today] and "AED" in cache[today]:
-        print("📦 Using cached official rates")
-        return cache[today]["USD"], cache[today]["AED"]
+    # If user exceeded limit, use cache only
+    usd_usage = get_usage_count("USD")
+    aed_usage = get_usage_count("AED")
+
+    if not force_live and (usd_usage >= DAILY_LIMIT or aed_usage >= DAILY_LIMIT):
+        print("📦 Using cached official rates (limit exceeded).")
+        return cache[today].get("USD"), cache[today].get("AED")
 
     print("🌐 Fetching official rates from exchangerate.host/change ...")
     try:
@@ -146,7 +145,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Daily limit: {DAILY_LIMIT} requests per currency.\n"
     )
     if username == ADMIN_USERNAME:
-        message += "\n🛠 Admin command: `/force_refresh` – clear cache and refresh data."
+        message += "\n🛠 Admin commands:\n" \
+                   "• `/force_refresh` – Clear cache and refresh data.\n" \
+                   "• `/cashed` – View current cache file content."
     await update.message.reply_text(message, parse_mode="Markdown")
 
 
@@ -154,9 +155,8 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not increment_usage("USD") or not increment_usage("AED"):
             await update.message.reply_text(
-                "⚠️ *Daily query limit reached.* Please try again tomorrow."
+                "⚠️ *Daily query limit reached.* Only cached official rates will be shown."
             )
-            return
 
         usd_market = get_sarf_today_rate("USD")
         aed_market = get_sarf_today_rate("AED")
@@ -180,8 +180,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message += f"  • Official: {aed_official:.4f} EGP\n"
         message += "\n"
 
-        message += "📝 Data sources: Sarf-Today (Market) & exchangerate.host/change (Official)"
-
+        message += "📝 Data sources: Sarf-Today & CurrencyLayer"
         await update.message.reply_text(message, parse_mode="Markdown")
 
     except Exception as e:
@@ -192,7 +191,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
 
-# ----------------- Admin Command -----------------
+# ----------------- Admin Commands -----------------
 async def force_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
     if username != ADMIN_USERNAME:
@@ -208,11 +207,27 @@ async def force_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ Failed to clear {file}: {e}")
             return
 
+    # Refresh all data live
     get_sarf_today_rate("USD")
     get_sarf_today_rate("AED")
-    get_currencylayer_rates()
+    get_currencylayer_rates(force_live=True)
 
     await update.message.reply_text("✅ Cache cleared and data refreshed successfully.")
+
+
+async def cashed(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    username = update.effective_user.username
+    if username != ADMIN_USERNAME:
+        await update.message.reply_text("🚫 You are not authorized to view the cache.")
+        return
+
+    cache_data = load_cache(API_CACHE_FILE)
+    if not cache_data:
+        await update.message.reply_text("📭 Cache file is empty.")
+        return
+
+    formatted = json.dumps(cache_data, indent=2)
+    await update.message.reply_text(f"🗂 *Current Cached Data:*\n```\n{formatted}\n```", parse_mode="Markdown")
 
 
 # ----------------- Main -----------------
@@ -235,6 +250,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rate", rate))
     app.add_handler(CommandHandler("force_refresh", force_refresh))
+    app.add_handler(CommandHandler("cashed", cashed))
 
     print("✅ Bot is running (polling mode, with extended timeout)...")
     app.run_polling()
