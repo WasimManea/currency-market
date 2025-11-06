@@ -191,23 +191,29 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ----------------- Admin Commands -----------------
 async def force_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        deleted_files = []
+        # Remove cache files if they exist
         for file in [CACHE_FILE, API_CACHE_FILE]:
             if os.path.exists(file):
                 os.remove(file)
-                deleted_files.append(file)
+
+        # Recreate empty cache files
         for file in [CACHE_FILE, API_CACHE_FILE]:
             with open(file, "w") as f:
-                json.dump({}, f)
+                f.write("{}")  # empty JSON object
 
-        msg = "🧹 Cleared cache files: " + ", ".join(deleted_files) if deleted_files else "ℹ️ No cache files found. Empty caches created."
-        await update.message.reply_text(escape_md(msg), parse_mode="MarkdownV2")
-    except TimedOut:
-        print("⚠️ Telegram API timed out while sending a message.")
-    except BadRequest as e:
-        print("⚠️ BadRequest:", e)
+        # Send simple confirmation
+        await update.message.reply_text("✅ Cache files cleared successfully.")
+        
     except Exception as e:
         print(f"❌ Error in force_refresh: {e}")
+        try:
+            await update.message.reply_text("⚠️ An error occurred while clearing cache.")
+        except Exception:
+            pass
+
+
+
+
 
 async def cashed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
