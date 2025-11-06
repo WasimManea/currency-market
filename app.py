@@ -8,23 +8,24 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ACCESS_KEY = os.getenv("ACCESS_KEY")
 CACHE_FILE = "usage_cache.json"
+API_CACHE_FILE = "api_cache.json"
 DAILY_LIMIT = 20
 SARF_TODAY_URL = "https://sarf-today.com/app_api/cur_market.json"
 
 # ----------------- Cache helpers -----------------
-def load_cache():
-    if not os.path.exists(CACHE_FILE):
+def load_cache(file):
+    if not os.path.exists(file):
         return {}
-    with open(CACHE_FILE, "r") as f:
+    with open(file, "r") as f:
         return json.load(f)
 
-def save_cache(cache):
-    with open(CACHE_FILE, "w") as f:
+def save_cache(cache, file):
+    with open(file, "w") as f:
         json.dump(cache, f)
 
 def increment_usage(currency):
     today = datetime.date.today().isoformat()
-    cache = load_cache()
+    cache = load_cache(CACHE_FILE)
     if today not in cache:
         cache[today] = {}
     if currency not in cache[today]:
@@ -33,22 +34,44 @@ def increment_usage(currency):
     if cache[today][currency] >= DAILY_LIMIT:
         return False
     cache[today][currency] += 1
-    save_cache(cache)
+    save_cache(cache, CACHE_FILE)
     return True
 
-# ----------------- API helpers -----------------
+# ----------------- API helpers with caching -----------------
 def get_sarf_today_rate(currency):
+    today = datetime.date.today().isoformat()
+    cache = load_cache(API_CACHE_FILE)
+
+    if today not in cache:
+        cache[today] = {}
+
+    if currency in cache[today]:
+        return cache[today][currency]  # return cached value
+
+    # Fetch from API
     try:
         response = requests.get(SARF_TODAY_URL)
         data = response.json()
         for item in data:
             if item["name"] == currency:
-                return float(item["ask"])
+                rate = float(item["ask"])
+                cache[today][currency] = rate
+                save_cache(cache, API_CACHE_FILE)
+                return rate
     except Exception as e:
         print("Sarf-Today API error:", e)
     return None
 
 def get_currencylayer_rates():
+    today = datetime.date.today().isoformat()
+    cache = load_cache(API_CACHE_FILE)
+
+    if today not in cache:
+        cache[today] = {}
+
+    if "USD" in cache[today] and "AED" in cache[today]:
+        return cache[today]["USD"], cache[today]["AED"]
+
     try:
         params = {"currencies": "AED,EGP", "access_key": ACCESS_KEY}
         response = requests.get("https://api.exchangerate.host/change", params=params)
@@ -56,18 +79,25 @@ def get_currencylayer_rates():
         if data.get("success") and "quotes" in data:
             usdaed = data["quotes"]["USDAED"]["end_rate"]
             usdegp = data["quotes"]["USDEGP"]["end_rate"]
-            return round(usdegp, 4), round(usdegp / usdaed, 4)
+            usd_rate = round(usdegp, 4)
+            aed_rate = round(usdegp / usdaed, 4)
+            cache[today]["USD"] = usd_rate
+            cache[today]["AED"] = aed_rate
+            save_cache(cache, API_CACHE_FILE)
+            return usd_rate, aed_rate
     except Exception as e:
         print("CurrencyLayer API error:", e)
     return None, None
 
-# ----------------- Handlers -----------------
+# ----------------- Telegram handlers -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Welcome to CurrencyBot Egypt!\nUse /rate to get USD & AED → EGP live rates (daily limit applies)."
+        "👋 Welcome to CurrencyBot Egypt!\n"
+        "Use /rate to get USD & AED → EGP live rates (daily limit applies)."
     )
 
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Check daily limit
     if not increment_usage("USD") or not increment_usage("AED"):
         await update.message.reply_text(
             "⚠️ Daily query limit reached. Please try again tomorrow."
@@ -106,7 +136,6 @@ def main():
     app.add_handler(CommandHandler("rate", rate))
 
     print("✅ Bot is running (polling mode)...")
-    # Use run_polling directly, no asyncio.run()
     app.run_polling()
 
 if __name__ == "__main__":
