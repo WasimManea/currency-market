@@ -1,11 +1,8 @@
-# Telegram bot library (stable v20.x)
-#python-telegram-bot==20.6
+# Telegram bot with webhook support
+python-telegram-bot[webhooks]==21.0
 
-# HTTP requests to APIs
+# For HTTP requests to APIs (Sarf-Today and CurrencyLayer)
 requests==2.31.0
 
-# Optional: dotenv support for storing secrets locally or in Railway
-python-dotenv==1.0.0
-
-
-python-telegram-bot[webhooks]==21.0
+# Optional: useful for datetime parsing if needed
+python-dateutil==2.9.2
