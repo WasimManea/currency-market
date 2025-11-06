@@ -3,20 +3,11 @@ import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Telegram bot token from environment variable
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
-# CurrencyLayer API
-CURRENCY_API_URL = "https://api.exchangerate.host/change"
 ACCESS_KEY = os.getenv("ACCESS_KEY")
-
-# Public URL provided by Railway (e.g., https://your-app-name.up.railway.app)
-RAILWAY_URL = "currency-market-production.up.railway.app"
-
-# Sarf-Today API
+RAILWAY_URL = os.getenv("RAILWAY_PUBLIC_URL")
 SARF_TODAY_URL = "https://sarf-today.com/app_api/cur_market.json"
 
-# Fetch Sarf-Today rates
 def get_sarf_today_rate(currency):
     try:
         response = requests.get(SARF_TODAY_URL)
@@ -32,13 +23,11 @@ def get_sarf_today_rate(currency):
         print("Sarf-Today API error:", e)
     return None
 
-# Fetch CurrencyLayer USD and AED → EGP
 def get_currencylayer_rates():
     try:
         params = {"currencies": "AED,EGP", "access_key": ACCESS_KEY}
-        response = requests.get(CURRENCY_API_URL, params=params)
+        response = requests.get("https://api.exchangerate.host/change", params=params)
         data = response.json()
-
         if data.get("success") and "quotes" in data:
             usdaed = data["quotes"]["USDAED"]["end_rate"]
             usdegp = data["quotes"]["USDEGP"]["end_rate"]
@@ -49,7 +38,6 @@ def get_currencylayer_rates():
         print("CurrencyLayer API error:", e)
     return None, None
 
-# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome to *CurrencyBot Egypt!*\n\n"
@@ -58,7 +46,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# /rate command
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usd_market = get_sarf_today_rate("USD")
     aed_market = get_sarf_today_rate("AED")
@@ -66,7 +53,6 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = "💱 *Live Exchange Rates*\n\n"
 
-    # USD
     message += "🇺🇸 *USD → EGP*\n"
     if usd_market:
         message += f"  • Market:  {usd_market['ask']:.2f} EGP (▲ {usd_market['change']}%)\n"
@@ -74,19 +60,16 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message += f"  • Official: {usd_official} EGP (CurrencyLayer)\n"
     message += "\n"
 
-    # AED
     message += "🇦🇪 *AED → EGP*\n"
     if aed_market:
         message += f"  • Market:  {aed_market['ask']:.2f} EGP (▲ {aed_market['change']}%)\n"
     if aed_official:
         message += f"  • Official: {aed_official} EGP (CurrencyLayer)\n"
 
-    message += "\n_Data sources: Sarf-Today (Egypt Market) & CurrencyLayer_"
-
+    message += "\n_Data sources: Sarf-Today & CurrencyLayer_"
     await update.message.reply_text(message, parse_mode="Markdown")
 
-# Main
-def main():
+async def main():
     if not BOT_TOKEN or not RAILWAY_URL:
         print("❌ TELEGRAM_BOT_TOKEN or RAILWAY_PUBLIC_URL not set. Exiting...")
         return
@@ -95,20 +78,20 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rate", rate))
 
-    # Telegram webhook URL
-    webhook_url = f"{RAILWAY_URL}/{BOT_TOKEN}"
-    print(f"✅ Setting webhook to {webhook_url}")
-    app.bot.set_webhook(webhook_url)
-
-    # Railway internal port
     PORT = int(os.environ.get("PORT", "8080"))
-    app.run_webhook(
+    webhook_url = f"{RAILWAY_URL}/{BOT_TOKEN}"
+
+    print(f"✅ Setting webhook to {webhook_url}")
+    # Use url_path to specify path, webhook_url is the full Telegram URL
+    await app.bot.set_webhook(webhook_url)
+
+    await app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
-        webhook_path=f"/{BOT_TOKEN}"
+        url_path=BOT_TOKEN,      # path Telegram will call
+        webhook_url=webhook_url  # full URL Telegram calls
     )
 
 if __name__ == "__main__":
-    main()
- 
-
+    import asyncio
+    asyncio.run(main())
