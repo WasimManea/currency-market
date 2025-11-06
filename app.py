@@ -8,7 +8,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # ================== CONFIG ==================
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-RAILWAY_PUBLIC_DOMAIN = os.environ["RAILWAY_STATIC_URL"]
+RAILWAY_STATIC_URL = os.environ["RAILWAY_PUBLIC_DOMAIN"]
 PORT = int(os.environ["PORT"])
 CACHE_FILE = "cached_rate.json"
 
@@ -59,4 +59,33 @@ async def get_exchange_rate():
         pass
     
     # fallback to Sarf-Today
-    sarf_data =_
+    sarf_data = await fetch_json(SARF_API)
+    usd = next((x for x in sarf_data if x["name"] == "USD"), {})
+    aed = next((x for x in sarf_data if x["name"] == "AED"), {})
+    rate = {"USD": float(usd.get("bid", 0)), "AED": float(aed.get("bid", 0))}
+    return rate, today
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    rate, date = await get_exchange_rate()
+    text = (
+        f"💱 Live Exchange Rates\n\n"
+        f"🇺🇸 USD → EGP: {rate['USD']}\n"
+        f"🇦🇪 AED → EGP: {rate['AED']}\n\n"
+        f"Source Date: {date}\n"
+        f"Data sources: Sarf-Today & ExchangeRate"
+    )
+    await update.message.reply_text(text)
+
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=BOT_TOKEN,
+        webhook_url=f"https://{RAILWAY_STATIC_URL}/{BOT_TOKEN}"
+    )
+
+if __name__ == "__main__":
+    main()
