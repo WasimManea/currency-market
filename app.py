@@ -10,6 +10,8 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CURRENCY_API_URL = "https://api.exchangerate.host/change"
 ACCESS_KEY = os.getenv("ACCESS_KEY")
 
+# Public URL provided by Railway (e.g., https://your-app-name.up.railway.app)
+RAILWAY_URL = os.getenv("RAILWAY_PUBLIC_URL")
 
 # Sarf-Today API
 SARF_TODAY_URL = "https://sarf-today.com/app_api/cur_market.json"
