@@ -1,125 +1,85 @@
 import os
 import requests
-import logging
-from fastapi import FastAPI, Request
 from telegram import Update
-from telegram.ext import Application, CommandHandler
-import gspread
-from google.oauth2.service_account import Credentials
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# --- ENV VARS ---
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID")  # optional
-GOOGLE_CRED_JSON = os.environ.get("GOOGLE_CRED_JSON")  # optional (stringified service account JSON)
+# Telegram bot token from environment variable
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# --- Logging ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# API URLs
+FRANKFURTER_URL = "https://api.frankfurter.app/latest"
+SARF_TODAY_URL = "https://sarf-today.com/app_api/cur_market.json"
 
-# --- FastAPI for webhook ---
-app = FastAPI()
-TELEGRAM_PATH = "/webhook"
+# Fetch official rate from Frankfurter
+def get_frankfurter_rate(from_currency, to_currency):
+    try:
+        response = requests.get(f"{FRANKFURTER_URL}?from={from_currency}&to={to_currency}")
+        data = response.json()
+        return data["rates"].get(to_currency)
+    except Exception as e:
+        print(f"Frankfurter API error: {e}")
+        return None
 
-# --- Google Sheets Setup (optional) ---
-gc = None
-sheet = None
-if GOOGLE_CRED_JSON and GOOGLE_SHEET_ID:
-    creds = Credentials.from_service_account_info(eval(GOOGLE_CRED_JSON), scopes=["https://www.googleapis.com/auth/spreadsheets"])
-    gc = gspread.authorize(creds)
-    sheet = gc.open_by_key(GOOGLE_SHEET_ID).sheet1
-
-# --- Helper to fetch rates ---
-def get_rates():
-    url = "https://sarf-today.com/app_api/cur_market.json"
-    response = requests.get(url, timeout=10)
-    response.raise_for_status()
-    return response.json()
-
-def find_currency(rates, code):
-    for c in rates:
-        if c["name"].upper() == code.upper():
-            return c
+# Fetch market rate from Sarf-Today
+def get_sarf_today_rate(currency):
+    try:
+        response = requests.get(SARF_TODAY_URL)
+        data = response.json()
+        for item in data:
+            if item["name"] == currency:
+                return {
+                    "ask": float(item["ask"]),
+                    "bid": float(item["bid"]),
+                    "change": item["change_percentage"],
+                }
+    except Exception as e:
+        print(f"Sarf-Today API error: {e}")
     return None
 
-def convert_to_egp(amount, from_currency):
-    rates = get_rates()
-    cur = find_currency(rates, from_currency)
-    if not cur:
-        return None
-    egp_value = amount * float(cur["ask"])
-    return egp_value, cur["ask"]
-
-# --- Telegram commands ---
-async def start(update: Update, context):
-    msg = (
-        "Welcome to 💱 Currency Bot!\n"
-        "Use:\n"
-        "• /usd <amount> → Convert USD → EGP\n"
-        "• /aed <amount> → Convert AED → EGP\n"
-        "• /convert <amount> <currency_code> → Convert any currency → EGP"
+# /start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 Welcome to *CurrencyBot Egypt!*\n\n"
+        "Use /rate to get live USD and AED to EGP rates.\n\n"
+        "Example:\n/rate",
+        parse_mode="Markdown"
     )
-    await update.message.reply_text(msg)
 
-async def usd(update: Update, context):
-    await convert_command(update, context, "USD")
+# /rate command
+async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Official ECB rates
+    usd_official = get_frankfurter_rate("USD", "EGP")
+    aed_official = get_frankfurter_rate("AED", "EGP")
 
-async def aed(update: Update, context):
-    await convert_command(update, context, "AED")
+    # Egyptian market rates
+    usd_market = get_sarf_today_rate("USD")
+    aed_market = get_sarf_today_rate("AED")
 
-async def convert_command(update: Update, context, currency=None):
-    try:
-        args = context.args
-        if not args:
-            await update.message.reply_text("Please enter an amount. Example: /usd 10")
-            return
+    if usd_market and aed_market and usd_official and aed_official:
+        message = (
+            "💱 *Live Exchange Rates*\n\n"
+            "🇺🇸 *USD → EGP*\n"
+            f"  • Official: {usd_official:.2f} EGP\n"
+            f"  • Market:  {usd_market['ask']:.2f} EGP (▲ {usd_market['change']}%)\n\n"
+            "🇦🇪 *AED → EGP*\n"
+            f"  • Official: {aed_official:.2f} EGP\n"
+            f"  • Market:  {aed_market['ask']:.2f} EGP (▲ {aed_market['change']}%)\n\n"
+            "_Official rates: Frankfurter (ECB)_\n"
+            "_Market rates: Sarf-Today Egypt_"
+        )
+    else:
+        message = "⚠️ Couldn’t fetch rates right now. Please try again later."
 
-        if currency:
-            amount = float(args[0])
-            cur = currency
-        else:
-            if len(args) < 2:
-                await update.message.reply_text("Usage: /convert <amount> <currency_code>")
-                return
-            amount = float(args[0])
-            cur = args[1].upper()
+    await update.message.reply_text(message, parse_mode="Markdown")
 
-        egp_value, rate = convert_to_egp(amount, cur)
-        if egp_value is None:
-            await update.message.reply_text(f"Currency {cur} not found.")
-            return
+# Main
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("rate", rate))
 
-        msg = f"{amount} {cur} = {egp_value:.2f} EGP 💰\n(1 {cur} = {rate} EGP)"
-        await update.message.reply_text(msg)
+    print("✅ Bot is running and connected to both APIs...")
+    app.run_polling()
 
-        # Log to Google Sheet
-        if sheet:
-            sheet.append_row([cur, amount, egp_value, rate, update.message.from_user.username or "", update.message.date.isoformat()])
-
-    except Exception as e:
-        logger.error(e)
-        await update.message.reply_text("Error fetching rate. Please try again later.")
-
-# --- Telegram setup ---
-application = Application.builder().token(BOT_TOKEN).build()
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("usd", usd))
-application.add_handler(CommandHandler("aed", aed))
-application.add_handler(CommandHandler("convert", convert_command))
-
-# --- FastAPI webhook endpoint ---
-@app.post(TELEGRAM_PATH)
-async def webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, application.bot)
-    await application.process_update(update)
-    return {"ok": True}
-
-# --- Root check ---
-@app.get("/")
-def home():
-    return {"message": "Currency bot running."}
-
-# --- Run on Railway ---
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    main()
