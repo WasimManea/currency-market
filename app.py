@@ -11,6 +11,7 @@ CACHE_FILE = "usage_cache.json"
 API_CACHE_FILE = "api_cache.json"
 DAILY_LIMIT = 20
 SARF_TODAY_URL = "https://sarf-today.com/app_api/cur_market.json"
+ADMIN_USERNAME = "Wasim_muhammed"
 
 # ----------------- Cache helpers -----------------
 def ensure_cache_files():
@@ -26,8 +27,7 @@ def ensure_cache_files():
 def load_cache(file):
     try:
         with open(file, "r") as f:
-            data = json.load(f)
-        return data
+            return json.load(f)
     except Exception as e:
         print(f"⚠️ Failed to load cache from {file}: {e}")
         return {}
@@ -131,30 +131,49 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usd_official, aed_official = get_currencylayer_rates()
 
     message = "💱 *Live Exchange Rates*\n\n"
-    message += f"📅 Rate Date: {rate_date or str(date.today())}\n\n"
 
-
-  # USD
+    # USD
     message += "🇺🇸 *USD → EGP*\n"
     if usd_market:
-        arrow = trend_arrow(usd_market['change'])
-        message += f"  • Market: {usd_market['ask']:.2f} EGP ({arrow} {usd_market['change']}%)\n"
+        message += f"  • Market: {usd_market:.2f} EGP\n"
     if usd_official:
-        message += f"  • Official: {usd_official:.4f} EGP (CurrencyLayer)\n"
+        message += f"  • Official: {usd_official:.4f} EGP\n"
     message += "\n"
 
     # AED
     message += "🇦🇪 *AED → EGP*\n"
     if aed_market:
-        arrow = trend_arrow(aed_market['change'])
-        message += f"  • Market: {aed_market['ask']:.2f} EGP ({arrow} {aed_market['change']}%)\n"
+        message += f"  • Market: {aed_market:.2f} EGP\n"
     if aed_official:
-        message += f"  • Official: {aed_official:.4f} EGP (CurrencyLayer)\n"
+        message += f"  • Official: {aed_official:.4f} EGP\n"
     message += "\n"
-        
-        message += "\n📝 Data sources: Sarf-Today (Market) & CurrencyLayer (Official, cached max 3/day)"
+
+    message += "📝 Data sources: Sarf-Today (Market) & CurrencyLayer (Official)"
 
     await update.message.reply_text(message, parse_mode="Markdown")
+
+# ----------------- Admin Command -----------------
+async def force_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    username = update.effective_user.username
+    if username != ADMIN_USERNAME:
+        await update.message.reply_text("🚫 You are not authorized to run this command.")
+        return
+
+    for file in [CACHE_FILE, API_CACHE_FILE]:
+        try:
+            with open(file, "w") as f:
+                json.dump({}, f)
+            print(f"🧹 Cleared {file}")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Failed to clear {file}: {e}")
+            return
+
+    # Fetch new data
+    get_sarf_today_rate("USD")
+    get_sarf_today_rate("AED")
+    get_currencylayer_rates()
+
+    await update.message.reply_text("✅ Cache cleared and data refreshed successfully.")
 
 # ----------------- Main -----------------
 def main():
@@ -167,6 +186,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rate", rate))
+    app.add_handler(CommandHandler("force_refresh", force_refresh))
 
     print("✅ Bot is running (polling mode)...")
     app.run_polling()
