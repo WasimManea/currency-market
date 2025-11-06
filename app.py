@@ -134,7 +134,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Main
 def main():
-    port = int(os.environ.get("PORT", 8443))
+    port = int(os.environ.get("PORT", 8081))
     webhook_url = f"https://{RAILWAY_URL}/{BOT_TOKEN}"  # your Railway URL + bot token
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
