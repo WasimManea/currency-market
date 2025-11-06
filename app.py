@@ -1,19 +1,17 @@
 import os
-import json
-import datetime
 import requests
+import datetime
+import json
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ACCESS_KEY = os.getenv("ACCESS_KEY")
 CACHE_FILE = "usage_cache.json"
-DAILY_LIMIT = 20  # max queries per currency per day
+DAILY_LIMIT = 20
 SARF_TODAY_URL = "https://sarf-today.com/app_api/cur_market.json"
 
-# -------------------------------
-# Cache helpers
-# -------------------------------
+# ----------------- Cache helpers -----------------
 def load_cache():
     if not os.path.exists(CACHE_FILE):
         return {}
@@ -33,15 +31,12 @@ def increment_usage(currency):
         cache[today][currency] = 0
 
     if cache[today][currency] >= DAILY_LIMIT:
-        return False  # limit reached
-
+        return False
     cache[today][currency] += 1
     save_cache(cache)
     return True
 
-# -------------------------------
-# API helpers
-# -------------------------------
+# ----------------- API helpers -----------------
 def get_sarf_today_rate(currency):
     try:
         response = requests.get(SARF_TODAY_URL)
@@ -66,17 +61,13 @@ def get_currencylayer_rates():
         print("CurrencyLayer API error:", e)
     return None, None
 
-# -------------------------------
-# Telegram handlers
-# -------------------------------
+# ----------------- Handlers -----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Welcome to CurrencyBot Egypt!\n"
-        "Use /rate to get USD & AED → EGP live rates (daily limit applies)."
+        "👋 Welcome to CurrencyBot Egypt!\nUse /rate to get USD & AED → EGP live rates (daily limit applies)."
     )
 
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Check daily limit
     if not increment_usage("USD") or not increment_usage("AED"):
         await update.message.reply_text(
             "⚠️ Daily query limit reached. Please try again tomorrow."
@@ -104,10 +95,8 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(message)
 
-# -------------------------------
-# Main
-# -------------------------------
-async def main():
+# ----------------- Main -----------------
+def main():
     if not BOT_TOKEN:
         print("❌ TELEGRAM_BOT_TOKEN not set. Exiting...")
         return
@@ -117,8 +106,8 @@ async def main():
     app.add_handler(CommandHandler("rate", rate))
 
     print("✅ Bot is running (polling mode)...")
-    await app.run_polling()
+    # Use run_polling directly, no asyncio.run()
+    app.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    main()
