@@ -89,8 +89,21 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rate", rate))
 
-    print("✅ Bot is running...")
-    app.run_polling()
+    # Webhook setup for Railway
+    if RAILWAY_URL:
+        webhook_url = f"{RAILWAY_URL}/{BOT_TOKEN}"
+        print(f"✅ Setting webhook to {webhook_url}")
+        app.bot.set_webhook(webhook_url)
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=int(os.environ.get("PORT", "8080")),
+            webhook_path=f"/{BOT_TOKEN}"
+        )
+    else:
+        print("❌ No Railway URL found, running with polling")
+        app.run_polling()
 
 if __name__ == "__main__":
     main()
+ 
+
