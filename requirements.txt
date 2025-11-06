@@ -1,8 +1,11 @@
 # Telegram bot library (stable v20.x)
-python-telegram-bot==20.6
+#python-telegram-bot==20.6
 
 # HTTP requests to APIs
 requests==2.31.0
 
 # Optional: dotenv support for storing secrets locally or in Railway
 python-dotenv==1.0.0
+
+
+python-telegram-bot[webhooks]==21.0
