@@ -35,12 +35,17 @@ def load_cache(file):
         return {}
 
 def save_cache(cache, file):
+    """Save cache and add last_updated timestamp."""
     try:
+        # Add/update timestamp
+        cache["_last_updated"] = datetime.datetime.now().isoformat()
         with open(file, "w") as f:
             json.dump(cache, f, indent=2)
-        print(f"💾 Cache updated → {file}")
+        print(f"💾 Cache updated → {file} (last_updated: {cache['_last_updated']})")
     except Exception as e:
         print(f"❌ Failed to save cache {file}: {e}")
+
+
 
 def get_usage_count(currency):
     today = datetime.date.today().isoformat()
