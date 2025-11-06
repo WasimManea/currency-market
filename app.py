@@ -131,19 +131,28 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usd_official, aed_official = get_currencylayer_rates()
 
     message = "💱 *Live Exchange Rates*\n\n"
+    message += f"📅 Rate Date: {rate_date or str(date.today())}\n\n"
 
+
+  # USD
     message += "🇺🇸 *USD → EGP*\n"
     if usd_market:
-        message += f"  • Market: `{usd_market:.2f}` EGP\n"
+        arrow = trend_arrow(usd_market['change'])
+        message += f"  • Market: {usd_market['ask']:.2f} EGP ({arrow} {usd_market['change']}%)\n"
     if usd_official:
-        message += f"  • Official: `{usd_official}` EGP\n"
+        message += f"  • Official: {usd_official:.4f} EGP (CurrencyLayer)\n"
     message += "\n"
 
+    # AED
     message += "🇦🇪 *AED → EGP*\n"
     if aed_market:
-        message += f"  • Market: `{aed_market:.2f}` EGP\n"
+        arrow = trend_arrow(aed_market['change'])
+        message += f"  • Market: {aed_market['ask']:.2f} EGP ({arrow} {aed_market['change']}%)\n"
     if aed_official:
-        message += f"  • Official: `{aed_official}` EGP\n"
+        message += f"  • Official: {aed_official:.4f} EGP (CurrencyLayer)\n"
+    message += "\n"
+        
+        message += "\n📝 Data sources: Sarf-Today (Market) & CurrencyLayer (Official, cached max 3/day)"
 
     await update.message.reply_text(message, parse_mode="Markdown")
 
