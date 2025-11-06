@@ -87,23 +87,26 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Main
 def main():
+    if not BOT_TOKEN or not RAILWAY_URL:
+        print("❌ TELEGRAM_BOT_TOKEN or RAILWAY_PUBLIC_URL not set. Exiting...")
+        return
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rate", rate))
 
-    # Webhook setup for Railway
-    if RAILWAY_URL:
-        webhook_url = f"{RAILWAY_URL}/{BOT_TOKEN}"
-        print(f"✅ Setting webhook to {webhook_url}")
-        app.bot.set_webhook(webhook_url)
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=int(os.environ.get("PORT", "8080")),
-            webhook_path=f"/{BOT_TOKEN}"
-        )
-    else:
-        print("❌ No Railway URL found, running with polling")
-        app.run_polling()
+    # Telegram webhook URL
+    webhook_url = f"{RAILWAY_URL}/{BOT_TOKEN}"
+    print(f"✅ Setting webhook to {webhook_url}")
+    app.bot.set_webhook(webhook_url)
+
+    # Railway internal port
+    PORT = int(os.environ.get("PORT", "8080"))
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_path=f"/{BOT_TOKEN}"
+    )
 
 if __name__ == "__main__":
     main()
