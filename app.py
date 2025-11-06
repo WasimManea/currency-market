@@ -6,21 +6,14 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 # Telegram bot token from environment variable
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# API URLs
-FRANKFURTER_URL = "https://api.frankfurter.app/latest"
+# CurrencyLayer API
+CURRENCY_API_URL = "https://api.exchangerate.host/change"
+ACCESS_KEY = "4fcbc72dcd2d4b364af824ea0c319a32"
+
+# Sarf-Today API
 SARF_TODAY_URL = "https://sarf-today.com/app_api/cur_market.json"
 
-# Fetch official rate from Frankfurter
-def get_frankfurter_rate(from_currency, to_currency):
-    try:
-        response = requests.get(f"{FRANKFURTER_URL}?from={from_currency}&to={to_currency}")
-        data = response.json()
-        return data["rates"].get(to_currency)
-    except Exception as e:
-        print(f"Frankfurter API error: {e}")
-        return None
-
-# Fetch market rate from Sarf-Today
+# Fetch Sarf-Today rates
 def get_sarf_today_rate(currency):
     try:
         response = requests.get(SARF_TODAY_URL)
@@ -30,45 +23,62 @@ def get_sarf_today_rate(currency):
                 return {
                     "ask": float(item["ask"]),
                     "bid": float(item["bid"]),
-                    "change": item["change_percentage"],
+                    "change": item["change_percentage"]
                 }
     except Exception as e:
-        print(f"Sarf-Today API error: {e}")
+        print("Sarf-Today API error:", e)
     return None
+
+# Fetch CurrencyLayer USD and AED → EGP
+def get_currencylayer_rates():
+    try:
+        params = {"currencies": "AED,EGP", "access_key": ACCESS_KEY}
+        response = requests.get(CURRENCY_API_URL, params=params)
+        data = response.json()
+
+        if data.get("success") and "quotes" in data:
+            usdaed = data["quotes"]["USDAED"]["end_rate"]
+            usdegp = data["quotes"]["USDEGP"]["end_rate"]
+            aed_to_egp = round(usdegp / usdaed, 4)
+            usd_to_egp = round(usdegp, 4)
+            return usd_to_egp, aed_to_egp
+    except Exception as e:
+        print("CurrencyLayer API error:", e)
+    return None, None
 
 # /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome to *CurrencyBot Egypt!*\n\n"
-        "Use /rate to get live USD and AED to EGP rates.\n\n"
-        "Example:\n/rate",
+        "Use /rate to get live USD and AED → EGP rates from Sarf-Today and CurrencyLayer.\n"
+        "Example: /rate",
         parse_mode="Markdown"
     )
 
 # /rate command
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Official ECB rates
-    usd_official = get_frankfurter_rate("USD", "EGP")
-    aed_official = get_frankfurter_rate("AED", "EGP")
-
-    # Egyptian market rates
     usd_market = get_sarf_today_rate("USD")
     aed_market = get_sarf_today_rate("AED")
+    usd_official, aed_official = get_currencylayer_rates()
 
-    if usd_market and aed_market and usd_official and aed_official:
-        message = (
-            "💱 *Live Exchange Rates*\n\n"
-            "🇺🇸 *USD → EGP*\n"
-            f"  • Official: {usd_official:.2f} EGP\n"
-            f"  • Market:  {usd_market['ask']:.2f} EGP (▲ {usd_market['change']}%)\n\n"
-            "🇦🇪 *AED → EGP*\n"
-            f"  • Official: {aed_official:.2f} EGP\n"
-            f"  • Market:  {aed_market['ask']:.2f} EGP (▲ {aed_market['change']}%)\n\n"
-            "_Official rates: Frankfurter (ECB)_\n"
-            "_Market rates: Sarf-Today Egypt_"
-        )
-    else:
-        message = "⚠️ Couldn’t fetch rates right now. Please try again later."
+    message = "💱 *Live Exchange Rates*\n\n"
+
+    # USD
+    message += "🇺🇸 *USD → EGP*\n"
+    if usd_market:
+        message += f"  • Market:  {usd_market['ask']:.2f} EGP (▲ {usd_market['change']}%)\n"
+    if usd_official:
+        message += f"  • Official: {usd_official} EGP (CurrencyLayer)\n"
+    message += "\n"
+
+    # AED
+    message += "🇦🇪 *AED → EGP*\n"
+    if aed_market:
+        message += f"  • Market:  {aed_market['ask']:.2f} EGP (▲ {aed_market['change']}%)\n"
+    if aed_official:
+        message += f"  • Official: {aed_official} EGP (CurrencyLayer)\n"
+
+    message += "\n_Data sources: Sarf-Today (Egypt Market) & CurrencyLayer_"
 
     await update.message.reply_text(message, parse_mode="Markdown")
 
@@ -78,7 +88,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rate", rate))
 
-    print("✅ Bot is running and connected to both APIs...")
+    print("✅ Bot is running...")
     app.run_polling()
 
 if __name__ == "__main__":
