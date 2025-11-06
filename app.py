@@ -2,33 +2,30 @@ import os
 import json
 from datetime import date
 import requests
-from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Load .env locally
-load_dotenv()
+# Bot token and CurrencyLayer key
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # set in Railway env vars
+ACCESS_KEY = os.getenv("CURRENCY_ACCESS_KEY")  # set in Railway env vars
 
-# Env variables
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-ACCESS_KEY = os.getenv("CURRENCY_ACCESS_KEY")
+# Railway static URL
+RAILWAY_URL = "currency-market-production.up.railway.app"
 
-# CurrencyLayer API
+# API URLs
 CURRENCY_API_URL = "https://api.exchangerate.host/change"
-
-# Sarf-Today API
 SARF_TODAY_URL = "https://sarf-today.com/app_api/cur_market.json"
 
-# Cache
+# Cache setup
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 CACHE_FILE = os.path.join(CACHE_DIR, "currency_cache.json")
 MAX_CALLS_PER_DAY = 3
 
-# Helper to get Sarf-Today market rate
+# Fetch Sarf-Today market rate
 def get_sarf_today_rate(currency):
     try:
-        resp = requests.get(SARF_TODAY_URL)
+        resp = requests.get(SARF_TODAY_URL, timeout=10)
         data = resp.json()
         for item in data:
             if item["name"] == currency:
@@ -53,7 +50,7 @@ def save_cache(cache):
     with open(CACHE_FILE, "w") as f:
         json.dump(cache, f)
 
-# CurrencyLayer rates with caching
+# Fetch CurrencyLayer rates with caching
 def get_currencylayer_rates():
     cache = load_cache()
     today_str = str(date.today())
@@ -65,7 +62,7 @@ def get_currencylayer_rates():
     if cache["calls"] < MAX_CALLS_PER_DAY:
         try:
             params = {"currencies": "AED,EGP", "access_key": ACCESS_KEY}
-            response = requests.get(CURRENCY_API_URL, params=params)
+            response = requests.get(CURRENCY_API_URL, params=params, timeout=10)
             data = response.json()
             if data.get("success") and "quotes" in data:
                 usdaed = data["quotes"]["USDAED"]["end_rate"]
@@ -90,13 +87,13 @@ def get_currencylayer_rates():
             return cache["usd_egp"], cache["aed_egp"], cache.get("rate_date", today_str)
     return None, None, None
 
-# Trend helper
+# Trend arrow
 def trend_arrow(change_pct):
     if change_pct is None:
         return ""
     return "▲" if float(change_pct) > 0 else "▼"
 
-# /start
+# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome to *CurrencyBot Egypt!*\n\n"
@@ -105,13 +102,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# /rate
+# /rate command
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     usd_market = get_sarf_today_rate("USD")
     aed_market = get_sarf_today_rate("AED")
     usd_official, aed_official, rate_date = get_currencylayer_rates()
 
-    message = "💹 *Live Exchange Rates - EGYPT*\n\n"
+    message = "💱 *Live Exchange Rates – Egypt*\n\n"
     message += f"📅 Rate Date: {rate_date or str(date.today())}\n\n"
 
     # USD
@@ -132,24 +129,24 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message += f"  • Official: {aed_official:.4f} EGP (CurrencyLayer)\n"
     message += "\n"
 
-    # Quick conversion
-    if usd_market:
-        message += f"💡 Quick Conversion:\n"
-        message += f"  • 100 USD → {usd_market['ask']*100:.2f} EGP\n"
-    if aed_market:
-        message += f"  • 50 AED → {aed_market['ask']*50:.2f} EGP\n"
-
     message += "\n📝 Data sources: Sarf-Today (Market) & CurrencyLayer (Official, cached max 3/day)"
     await update.message.reply_text(message, parse_mode="Markdown")
 
 # Main
 def main():
+    port = int(os.environ.get("PORT", 8443))
+    webhook_url = f"https://{RAILWAY_URL}/{BOT_TOKEN}"  # your Railway URL + bot token
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rate", rate))
-    print("✅ Bot is running...")
-    app.run_polling()
+
+    print("✅ Bot running with webhook...")
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        webhook_url=webhook_url
+    )
 
 if __name__ == "__main__":
     main()
-
