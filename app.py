@@ -157,7 +157,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
         message = "💹 *Live Exchange Rates - EGYPT*\n\n"
-        message += f"📅 Rate Date: {rate_date or str(date.today())}\n\n"
+        message += f"📅 Rate Date: {str(date.today())}\n\n"
         
         message += "🇺🇸 *USD → EGP*\n"
         if usd_market:
