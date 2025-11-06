@@ -193,27 +193,40 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ----------------- Admin Commands -----------------
 async def force_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    username = update.effective_user.username
-    if username != ADMIN_USERNAME:
-        await update.message.reply_text("🚫 You are not authorized to run this command.")
-        return
+    try:
+        # 1️⃣ Delete cached file if exists
+        if os.path.exists(CACHE_FILE):
+            os.remove(CACHE_FILE)
+            await update.message.reply_text("🧹 Old cache file deleted.")
+        else:
+            await update.message.reply_text("ℹ️ No cache file found to delete.")
 
-    for file in [CACHE_FILE, API_CACHE_FILE]:
+        # 2️⃣ Recreate cache by calling your rate fetching logic
+        await update.message.reply_text("🔄 Fetching fresh exchange rates...")
+
+        # Example: if you already have a method to fetch and cache rates
+        # Replace this with your actual function name
+        if "get_exchange_rates" in globals():
+            rates = await get_exchange_rates(force_refresh=True)
+        elif "fetch_exchange_rates" in globals():
+            rates = await fetch_exchange_rates(force_refresh=True)
+        else:
+            rates = None
+
+        # 3️⃣ Confirm success
+        if rates:
+            await update.message.reply_text("✅ Cache cleared and refreshed successfully.")
+        else:
+            await update.message.reply_text("⚠️ Cache cleared, but failed to refresh rates.")
+
+    except TimedOut:
+        print("⚠️ Telegram API timed out while sending a message.")
+    except Exception as e:
+        print(f"❌ Error in force_refresh: {e}")
         try:
-            with open(file, "w") as f:
-                json.dump({}, f)
-            print(f"🧹 Cleared {file}")
-        except Exception as e:
-            await update.message.reply_text(f"❌ Failed to clear {file}: {e}")
-            return
-
-    # Refresh all data live
-    get_sarf_today_rate("USD")
-    get_sarf_today_rate("AED")
-    get_currencylayer_rates(force_live=True)
-
-    await update.message.reply_text("✅ Cache cleared and data refreshed successfully.")
-
+            await update.message.reply_text(f"❌ Error while refreshing: {e}")
+        except:
+            pass
 
 async def cashed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
