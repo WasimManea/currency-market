@@ -11,7 +11,7 @@ RAILWAY_URL = os.getenv("RAILWAY_PUBLIC_URL")
 
 # CurrencyLayer change API
 CURRENCY_API_URL = "https://api.exchangerate.host/change"
-ACCESS_KEY = os.getenv("CURRENCY_API_KEY")  # better to store in env
+ACCESS_KEY = os.getenv("ACCESS_KEY")  # better to store in env
 
 def get_aed_egp_rate():
     try:
