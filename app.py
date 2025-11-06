@@ -35,12 +35,16 @@ def load_cache(file):
         return {}
 
 def save_cache(cache, file):
+    """Save cache and add last_updated timestamp."""
     try:
+        # Add/update timestamp
+        cache["_last_updated"] = datetime.datetime.now().isoformat()
         with open(file, "w") as f:
             json.dump(cache, f, indent=2)
-        print(f"💾 Cache updated → {file}")
+        print(f"💾 Cache updated → {file} (last_updated: {cache['_last_updated']})")
     except Exception as e:
         print(f"❌ Failed to save cache {file}: {e}")
+
 
 def get_usage_count(currency):
     today = datetime.date.today().isoformat()
@@ -154,10 +158,11 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         usd_market = get_sarf_today_rate("USD")
         aed_market = get_sarf_today_rate("AED")
         usd_official, aed_official = get_currencylayer_rates()
+        today = datetime.date.today().strftime("%Y-%m-%d %H:%M:%S")
 
 
         message = "💹 *Live Exchange Rates - EGYPT*\n\n"
-        message += f"📅 Rate Date: {str(date.today())}\n\n"
+        message += f"📅 Rate Date: {today}\n\n"
         
         message += "🇺🇸 *USD → EGP*\n"
         if usd_market:
