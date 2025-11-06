@@ -97,7 +97,8 @@ def get_currencylayer_rates():
 
     print("🌐 Fetching official rates from exchangerate.host ...")
     try:
-        response = requests.get("https://api.exchangerate.host/latest?base=USD&symbols=AED,EGP", timeout=10)
+         params = {"currencies": "AED,EGP", "access_key": ACCESS_KEY}
+        response = requests.get("https://api.exchangerate.host/change", params=params)
         data = response.json()
         if data.get("success", True):
             usd_rate = round(data["rates"]["EGP"], 4)
