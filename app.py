@@ -3,7 +3,7 @@ import requests
 import datetime
 import json
 import asyncio
-from telegram.error import TimedOut
+from telegram.error import TimedOut, BadRequest, Conflict
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
@@ -196,25 +196,34 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ----------------- Admin Commands -----------------
 async def force_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Delete both cache files
+        deleted_files = []
         for file in [CACHE_FILE, API_CACHE_FILE]:
             if os.path.exists(file):
                 os.remove(file)
-        await update.message.reply_text("🧹 Cache files cleared. Fetching fresh data...")
+                deleted_files.append(file)
 
-        # Recreate caches by calling /rate logic
-        # Use asyncio.to_thread to run blocking requests in background
-        await asyncio.to_thread(rate, update, context)
+        # Recreate empty cache files
+        for file in [CACHE_FILE, API_CACHE_FILE]:
+            with open(file, "w") as f:
+                json.dump({}, f)
 
-        await update.message.reply_text("✅ Cache cleared and data refreshed successfully.")
+        msg = ""
+        if deleted_files:
+            msg = f"🧹 Cleared cache files: {', '.join(deleted_files)}\n✅ Cache recreated."
+        else:
+            msg = "ℹ️ No cache files were found. Empty caches have been created."
+
+        # Escape underscores for MarkdownV2
+        msg = msg.replace("_", "\\_")
+        await update.message.reply_text(msg, parse_mode="MarkdownV2")
+
     except TimedOut:
         print("⚠️ Telegram API timed out while sending a message.")
+    except BadRequest as e:
+        print("⚠️ BadRequest:", e)
     except Exception as e:
         print(f"❌ Error in force_refresh: {e}")
-        try:
-            await update.message.reply_text(f"❌ Error while refreshing: {e}")
-        except:
-            pass
+
 
 async def cashed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
