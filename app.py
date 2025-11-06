@@ -141,13 +141,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
     message = (
         "👋 Welcome to *CurrencyBot Egypt!*\n\n"
-        "Use `/rate` to get 🇺🇸 USD & 🇦🇪 AED → 🇪🇬 EGP live rates.\n"
+        "Use '/rate' to get 🇺🇸 USD & 🇦🇪 AED → 🇪🇬 EGP live rates.\n"
         f"Daily limit: {DAILY_LIMIT} requests per currency.\n"
     )
     if username == ADMIN_USERNAME:
         message += "\n🛠 Admin commands:\n" \
-                   "• `/force_refresh` – Clear cache and refresh data.\n" \
-                   "• `/cashed` – View current cache file content."
+                   "• '/force_refresh' – Clear cache and refresh data.\n" \
+                   "• '/cashed' – View current cache file content."
     await update.message.reply_text(message, parse_mode="Markdown")
 
 
@@ -200,25 +200,7 @@ async def force_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🧹 Old cache file deleted.")
         else:
             await update.message.reply_text("ℹ️ No cache file found to delete.")
-
-        # 2️⃣ Recreate cache by calling your rate fetching logic
-        await update.message.reply_text("🔄 Fetching fresh exchange rates...")
-
-        # Example: if you already have a method to fetch and cache rates
-        # Replace this with your actual function name
-        if "get_exchange_rates" in globals():
-            rates = await get_exchange_rates(force_refresh=True)
-        elif "fetch_exchange_rates" in globals():
-            rates = await fetch_exchange_rates(force_refresh=True)
-        else:
-            rates = None
-
-        # 3️⃣ Confirm success
-        if rates:
-            await update.message.reply_text("✅ Cache cleared and refreshed successfully.")
-        else:
-            await update.message.reply_text("⚠️ Cache cleared, but failed to refresh rates.")
-
+            
     except TimedOut:
         print("⚠️ Telegram API timed out while sending a message.")
     except Exception as e:
@@ -262,7 +244,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rate", rate))
-    app.add_handler(CommandHandler("force_refresh", force_refresh))
+    app.add_handler(CommandHandler("clear", force_refresh))
     app.add_handler(CommandHandler("cashed", cashed))
 
     print("✅ Bot is running (polling mode, with extended timeout)...")
