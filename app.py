@@ -150,7 +150,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message += "\n🛠 Admin commands:\n" \
                    "• '/force_refresh' – Clear cache and refresh data.\n" \
                    "• '/cashed' – View current cache file content."
-    await update.message.reply_text(message, parse_mode="Markdown")
+
+    # Escape underscores for Markdown
+    message = message.replace("_", "\\_")
+
+    await update.message.reply_text(message, parse_mode="MarkdownV2")
+
 
 
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
