@@ -143,13 +143,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
     message = (
         "👋 Welcome to *CurrencyBot Egypt!*\n\n"
-        "Use '/rate' to get 🇺🇸 USD & 🇦🇪 AED → 🇪🇬 EGP live rates.\n"
+        "Use /rate  to get 🇺🇸 USD & 🇦🇪 AED → 🇪🇬 EGP live rates.\n"
         f"Daily limit: {DAILY_LIMIT} requests per currency.\n"
     )
     if username == ADMIN_USERNAME:
         message += "\n🛠 Admin commands:\n" \
-                   "• '/force_refresh' – Clear cache and refresh data.\n" \
-                   "• '/cashed' – View current cache file content."
+                   "• /force_refresh – Clear cache and refresh data.\n" \
+                   "•  /cashed  – View current cache file content."
 
     # Escape underscores for Markdown
     message = message.replace("_", "\\_")
@@ -264,7 +264,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rate", rate))
-    app.add_handler(CommandHandler("clear", force_refresh))
+    app.add_handler(CommandHandler("force_refresh", force_refresh))
     app.add_handler(CommandHandler("cashed", cashed))
 
     print("✅ Bot is running (polling mode, with extended timeout)...")
