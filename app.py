@@ -194,13 +194,17 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ----------------- Admin Commands -----------------
 async def force_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # 1️⃣ Delete cached file if exists
-        if os.path.exists(CACHE_FILE):
-            os.remove(CACHE_FILE)
-            await update.message.reply_text("🧹 Old cache file deleted.")
-        else:
-            await update.message.reply_text("ℹ️ No cache file found to delete.")
-            
+        # Delete both cache files
+        for file in [CACHE_FILE, API_CACHE_FILE]:
+            if os.path.exists(file):
+                os.remove(file)
+        await update.message.reply_text("🧹 Cache files cleared. Fetching fresh data...")
+
+        # Recreate caches by calling /rate logic
+        # Use asyncio.to_thread to run blocking requests in background
+        await asyncio.to_thread(rate, update, context)
+
+        await update.message.reply_text("✅ Cache cleared and data refreshed successfully.")
     except TimedOut:
         print("⚠️ Telegram API timed out while sending a message.")
     except Exception as e:
