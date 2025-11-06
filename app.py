@@ -12,7 +12,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
 
-    PORT = int(os.environ.get("PORT", 8443))
+    PORT = int(os.environ.get("PORT", 8081))
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
